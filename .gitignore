@@ -1,21 +1,19 @@
-# Defendo generated files
+# Defendo
 logs/
 .defendo/reports/
+.defendo/logs/
 
-# Node.js
+# Node
 node_modules/
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
 
 # OS
+.DS_Store
 Thumbs.db
 Desktop.ini
-.DS_Store
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo

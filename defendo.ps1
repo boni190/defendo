@@ -26,7 +26,7 @@ param(
 
 $ErrorActionPreference = "Continue"
 Set-StrictMode -Version Latest
-$DefendoVersion = "6.0.0"
+$DefendoVersion = "6.1.1"
 $DefendoRoot = $PSScriptRoot
 
 function Write-Defendo {
@@ -47,20 +47,20 @@ function Test-Arg { param([string]$Name); return $Args -contains $Name }
 #region WINDOWS HARDENING
 function Invoke-WindowsHardening {
     param([string]$Mode="Gaming", [string]$Action="All")
-
+    
     function Test-Admin {
         $id=[Security.Principal.WindowsIdentity]::GetCurrent()
         $p=New-Object Security.Principal.WindowsPrincipal($id)
         return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
     if(-not (Test-Admin)){ throw "Ejecuta como Administrador" }
-
+    
     $logDir = Join-Path $DefendoRoot "logs"
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
     $log = Join-Path $logDir "defendo-windows-$(Get-Date -Format yyyyMMdd_HHmmss).log"
-
+    
     Write-Defendo "=== DEFENDO WINDOWS HARDENING Mode=$Mode ===" "OK"
-
+    
     # 1. Restore point
     if($Action -in @("All","Hardening")){
         try {
@@ -69,7 +69,7 @@ function Invoke-WindowsHardening {
             Write-Defendo "Punto de restauración creado" "OK"
         } catch { Write-Defendo "Restore point: $($_.Exception.Message)" "WARN" }
     }
-
+    
     # 2. VBS/HVCI/Credential Guard (requerido por Vanguard)
     if($Action -in @("All","Hardening")){
         Write-Defendo "Configurando VBS/HVCI..."
@@ -87,7 +87,7 @@ function Invoke-WindowsHardening {
         }
         Write-Defendo "VBS/HVCI configurado (requiere reinicio)" "OK"
     }
-
+    
     # 3. ASR Rules
     if($Action -in @("All","Hardening")){
         Write-Defendo "Aplicando ASR rules..."
@@ -102,34 +102,34 @@ function Invoke-WindowsHardening {
         $auditVal = if($Mode -eq "Gaming"){2}else{1}
         $asr["5beb7efe-fd9a-4556-801d-275e5ffc04cc"]=$auditVal
         $asr["01443614-cd74-433a-b99e-2ecdc07bfc25"]=$auditVal
-
+        
         try {
             Add-MpPreference -AttackSurfaceReductionRules_Ids $asr.Keys -AttackSurfaceReductionRules_Actions $asr.Values -ErrorAction Stop
             Write-Defendo "ASR aplicado" "OK"
         } catch { Write-Defendo "ASR: $($_.Exception.Message)" "WARN" }
     }
-
+    
     # 4. Servicios y features
     if($Action -in @("All","Hardening")){
-        foreach($f in @("SMB1Protocol","TelnetClient")){
+        foreach($f in @("SMB1Protocol","TelnetClient")){ 
             try { Disable-WindowsOptionalFeature -Online -FeatureName $f -NoRestart -ErrorAction Stop | Out-Null } catch {}
         }
         try { Set-Service RemoteRegistry -StartupType Disabled; Stop-Service RemoteRegistry -Force -ErrorAction SilentlyContinue } catch {}
-
+        
         if($Mode -eq "Gaming"){
-            foreach($s in @("vgc","vgk")){
+            foreach($s in @("vgc","vgk")){ 
                 try { Set-Service $s -StartupType Automatic; Start-Service $s -ErrorAction SilentlyContinue } catch {}
             }
             Write-Defendo "Vanguard protegido" "OK"
         }
     }
-
+    
     # 5. Firewall
     if($Action -in @("All","Hardening")){
         Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Allow
         Write-Defendo "Firewall configurado" "OK"
     }
-
+    
     # 6. Post-hardening
     if($Action -in @("All","PostHardening")){
         foreach($s in @("TeamViewer","TVService","SharedAccess")){
@@ -137,7 +137,7 @@ function Invoke-WindowsHardening {
         }
         Write-Defendo "Servicios innecesarios deshabilitados" "OK"
     }
-
+    
     # 7. Audit
     if($Action -in @("All","Audit")){
         Write-Defendo "Generando auditoría..."
@@ -166,13 +166,13 @@ function Invoke-WindowsHardening {
             $mp = Get-MpComputerStatus
             $audit += "Defender: RealTime=$($mp.RealTimeProtectionEnabled) Tamper=$($mp.IsTamperProtected)"
         } catch {}
-
+        
         $auditPath = Join-Path $logDir "windows-audit-$(Get-Date -Format yyyyMMdd_HHmmss).txt"
         $audit | Out-File $auditPath -Encoding UTF8
         Write-Defendo "Auditoría: $auditPath" "OK"
         $audit | ForEach-Object { Write-Host $_ }
     }
-
+    
     Write-Defendo "=== COMPLETADO ===" "OK"
     Write-Host "`nReinicia para aplicar HVCI completamente." -ForegroundColor Yellow
 }
@@ -183,12 +183,12 @@ function Initialize-Project {
     param($Manager="auto")
     $proj = Get-Location
     if(-not (Test-Path "package.json")){ Write-Defendo "No package.json en $proj" "ERROR"; return }
-
+    
     Write-Defendo "Inicializando Defendo en $proj"
     $defendoDir = ".defendo"
     New-Item -ItemType Directory -Path $defendoDir -Force | Out-Null
     New-Item -ItemType Directory -Path "$defendoDir/reports" -Force | Out-Null
-
+    
     # Detectar manager
     if($Manager -eq "auto"){
         if(Test-Path "pnpm-lock.yaml"){ $Manager="pnpm" }
@@ -196,7 +196,7 @@ function Initialize-Project {
         else { $Manager="npm" }
     }
     Write-Defendo "Package manager: $Manager"
-
+    
     # Config
     $config = @{
         version = $DefendoVersion
@@ -206,7 +206,7 @@ function Initialize-Project {
         allowlist = @()
     }
     $config | ConvertTo-Json -Depth 4 | Out-File "$defendoDir/config.json" -Encoding UTF8
-
+    
     # .npmrc endurecido
     if($Manager -eq "npm"){
         @"
@@ -216,7 +216,7 @@ save-exact=true
 package-lock=true
 "@ | Out-File ".npmrc" -Encoding ASCII -Append
     }
-
+    
     # AGENTS.md
     @"
 # Defendo Security Baseline
@@ -224,111 +224,124 @@ package-lock=true
 Este proyecto usa Defendo v$DefendoVersion para endurecer dependencias.
 
 ## Comandos
-- ``defendo doctor`` - valida entorno
-- ``defendo audit`` - audita dependencias
-- ``defendo install`` - instala con baseline
+- `defendo doctor` - valida entorno
+- `defendo audit` - audita dependencias
+- `defendo install` - instala con baseline
 
 ## Política
 - Critical/High: bloquean CI
 - Medium: revisar
 - Low: informativo
 "@ | Out-File "AGENTS.md" -Encoding UTF8
-
+    
     Write-Defendo "Proyecto inicializado" "OK"
 }
 
 function Invoke-Doctor {
     $proj = Get-Location
     Write-Defendo "Doctor: $proj"
-
+    
     $checks = @()
-
+    
     # Node
     try { $node = node --version; $checks += "[OK] Node $node" } catch { $checks += "[FAIL] Node no encontrado" }
-
+    
     # Package manager
     $pm = "npm"
     if(Test-Path "pnpm-lock.yaml"){ $pm="pnpm" }
     elseif(Test-Path "yarn.lock"){ $pm="yarn" }
     $checks += "[OK] Manager: $pm"
-
+    
     # package.json
     if(Test-Path "package.json"){ $checks += "[OK] package.json presente" } else { $checks += "[WARN] No package.json" }
-
+    
     # Defendo config
-    if(Test-Path ".defendo/config.json"){ $checks += "[OK] Defendo configurado" } else { $checks += "[WARN] Ejecuta 'defendo init'" }
-
+    if(Test-Path ".defendo/config.json"){ 
+        $checks += "[OK] Defendo configurado"
+        try {
+            $cfg = Get-Content ".defendo/config.json" | ConvertFrom-Json
+            $checks += "[OK] Defendo v$($cfg.version)"
+        } catch {}
+    } else { $checks += "[WARN] Ejecuta 'defendo init'" }
+    
     # Windows hardening (si aplica)
     try {
         $dg = Get-CimInstance -Namespace root/Microsoft/Windows/DeviceGuard -ClassName Win32_DeviceGuard -ErrorAction Stop
         if($dg.SecurityServicesRunning -contains 2){ $checks += "[OK] HVCI activo" } else { $checks += "[WARN] HVCI inactivo" }
         if($dg.SecurityServicesRunning -contains 1){ $checks += "[OK] Credential Guard activo" }
     } catch {}
-
+    
     $checks | ForEach-Object { Write-Host $_ }
 }
 
 function Invoke-Audit {
     $proj = Get-Location
     Write-Defendo "Audit: $proj"
-
+    
     if(-not (Test-Path "package.json")){ Write-Defendo "No package.json" "ERROR"; return }
-
+    
     $reportDir = ".defendo/reports"
     New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
     $ts = Get-Date -Format "yyyyMMdd_HHmmss"
     $report = "$reportDir/defendo-audit-$ts.json"
-
+    
     $findings = @()
-
+    
     # 1. Check package.json
     $pkg = Get-Content "package.json" | ConvertFrom-Json
-    if($pkg.dependencies){
+    if($pkg.PSObject.Properties.Name -contains "dependencies" -and $pkg.dependencies){
         foreach($dep in $pkg.dependencies.PSObject.Properties){
-            if($dep.Value -match "[\^\~]"){
+            if($dep.Value -match "[\^\~]"){ 
                 $findings += @{ id="PKG-PINNING"; severity="Medium"; package=$dep.Name; version=$dep.Value; message="Usa rango, mejor pin exacto" }
             }
         }
     }
-
+    if($pkg.PSObject.Properties.Name -contains "devDependencies" -and $pkg.devDependencies){
+        foreach($dep in $pkg.devDependencies.PSObject.Properties){
+            if($dep.Value -match "[\^\~]"){ 
+                $findings += @{ id="PKG-PINNING-DEV"; severity="Low"; package=$dep.Name; version=$dep.Value; message="Dev dep con rango" }
+            }
+        }
+    }
+    
     # 2. Check lockfile
     $lockFile = $null
     if(Test-Path "package-lock.json"){ $lockFile="package-lock.json" }
     elseif(Test-Path "pnpm-lock.yaml"){ $lockFile="pnpm-lock.yaml" }
-
+    
     if($lockFile){ $findings += @{ id="LOCK-PRESENT"; severity="Info"; message="Lockfile $lockFile encontrado" } }
     else { $findings += @{ id="LOCK-MISSING"; severity="High"; message="Sin lockfile" } }
-
+    
     # 3. Scan node_modules (heurístico básico)
     if(Test-Path "node_modules"){
         $suspicious = Get-ChildItem "node_modules" -Recurse -File -Include *.js -ErrorAction SilentlyContinue | Select-Object -First 100 | Where-Object {
             $content = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
             $content -match "eval\(|child_process|require\(['""]http" -and $_.Length -lt 50000
         } | Select-Object -First 5
-
+        
         foreach($f in $suspicious){
             $findings += @{ id="MOD-SUSPICIOUS"; severity="Low"; file=$f.FullName.Replace($PWD,""); message="Patrón sospechoso" }
         }
     }
-
+    
     $result = @{
         timestamp = (Get-Date).ToString("o")
         project = $proj.Path
         defendoVersion = $DefendoVersion
         findings = $findings
         summary = @{
-            critical = ($findings | Where-Object severity -eq "Critical").Count
-            high = ($findings | Where-Object severity -eq "High").Count
-            medium = ($findings | Where-Object severity -eq "Medium").Count
-            low = ($findings | Where-Object severity -eq "Low").Count
+            critical = @($findings | Where-Object severity -eq "Critical").Count
+            high = @($findings | Where-Object severity -eq "High").Count
+            medium = @($findings | Where-Object severity -eq "Medium").Count
+            low = @($findings | Where-Object severity -eq "Low").Count
         }
     }
-
+    
     $result | ConvertTo-Json -Depth 5 | Out-File $report -Encoding UTF8
-
+    
     Write-Defendo "Findings: Critical=$($result.summary.critical) High=$($result.summary.high) Medium=$($result.summary.medium) Low=$($result.summary.low)" "OK"
     Write-Defendo "Reporte: $report" "OK"
-
+    
     if($result.summary.critical -gt 0 -or $result.summary.high -gt 0){
         Write-Defendo "Bloqueantes encontrados" "WARN"
         exit 1
@@ -340,7 +353,7 @@ function Invoke-Install {
     $pm = "npm"
     if(Test-Path "pnpm-lock.yaml"){ $pm="pnpm" }
     elseif(Test-Path "yarn.lock"){ $pm="yarn" }
-
+    
     Write-Defendo "Instalando con $pm..."
     if($pkgs.Count -gt 0){
         & $pm install $pkgs

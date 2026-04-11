@@ -1,114 +1,100 @@
-# Defendo
+# Defendo v6.1.1
 
-![Windows 11](https://img.shields.io/badge/Windows%2011-22000%2B-0078D4?logo=windows11&logoColor=white)
-![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-5391FE?logo=powershell&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
-![Version](https://img.shields.io/badge/Defendo-v6.0.0-blue)
+[![Windows](https://img.shields.io/badge/Windows-11-0078D6?logo=windows)](https://www.microsoft.com/windows)
+[![PowerShell](https://img.shields.io/badge/PowerShell-7+-5391FE?logo=powershell)](https://github.com/PowerShell/PowerShell)
+[![Node](https://img.shields.io/badge/Node-18+-339933?logo=node.js)](https://nodejs.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Toolkit Windows-first para endurecer Node.js y Windows 11 sin romper gaming.**
+**Toolkit Windows-first para endurecer proyectos Node.js/TypeScript y Windows 11 sin romper gaming.**
 
-Defendo v6 unifica hardening de Windows 11, auditoría de dependencias Node.js, diagnóstico de entorno e instalación segura en un solo archivo PowerShell. Sin dependencias externas, sin módulos extra.
+Defendo reduce la superficie de ataque de supply chain, valida entornos, audita dependencias y endurece Windows 11 manteniendo compatibilidad total con Riot Vanguard y League of Legends.
+
+> Validado en producción: Windows 11 25H2 (build 26200) + Node 24.14.1
 
 ---
 
 ## Quickstart
 
+### 1. Hardening Windows (una vez por máquina)
+
 ```powershell
-# 1. Hardening Windows (una vez, como Admin)
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 windows --mode Gaming
-
-# 2. Inicializar proyecto Node.js
-cd C:\dev\mi-proyecto
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 init
-
-# 3. Auditar dependencias
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 audit
+# Como Administrador
+pwsh -ExecutionPolicy Bypass -File .\defendo.ps1 windows --mode Gaming
 ```
 
----
+### 2. En tu proyecto Node.js
 
-## Comandos
-
-| Comando | Descripción | Ejemplo |
-|---------|-------------|---------|
-| `windows` | Hardening Windows 11 (VBS, HVCI, ASR, firewall) | `defendo.ps1 windows --mode Gaming` |
-| `init` | Inicializa proyecto Node.js con baseline de seguridad | `defendo.ps1 init --manager pnpm` |
-| `doctor` | Valida entorno: Node, package manager, HVCI, config | `defendo.ps1 doctor` |
-| `audit` | Audita package.json, lockfile y node_modules | `defendo.ps1 audit` |
-| `install` | Instala dependencias con el package manager detectado | `defendo.ps1 install express` |
-| `ci` | Alias de audit para pipelines CI | `defendo.ps1 ci` |
-| `version` | Muestra versión de Defendo | `defendo.ps1 version` |
-| `help` | Muestra ayuda completa | `defendo.ps1 help` |
-
-Ver [docs/COMMANDS.md](docs/COMMANDS.md) para referencia completa.
+```powershell
+cd mi-proyecto
+pwsh -ExecutionPolicy Bypass -File .\defendo.ps1 init
+pwsh -ExecutionPolicy Bypass -File .\defendo.ps1 doctor
+pwsh -ExecutionPolicy Bypass -File .\defendo.ps1 audit
+```
 
 ---
 
 ## Gaming Safe
 
-Defendo fue diseñado para coexistir con **Riot Vanguard** (League of Legends, VALORANT) y otros anti-cheat que requieren seguridad a nivel kernel.
-
-**Por qué funciona:**
-
-- **VBS/HVCI activados**: Vanguard los requiere. Defendo los habilita, no los desactiva.
-- **Credential Guard**: Protege credenciales en memoria. Compatible con Vanguard.
-- **Servicios Vanguard protegidos**: En modo `Gaming`, Defendo asegura que `vgc` y `vgk` estén en inicio automático.
-- **ASR en modo audit para reglas conflictivas**: Las 2 reglas ASR que pueden interferir con anti-cheat se aplican en modo audit (no bloqueo) cuando usas `--mode Gaming`.
-
-```powershell
-# Hardening completo compatible con gaming
-pwsh -ExecutionPolicy Bypass -File defendo.ps1 windows --mode Gaming
-
-# Verificar estado
-pwsh -ExecutionPolicy Bypass -File defendo.ps1 windows --action Audit
-```
-
-Ver [docs/WINDOWS_HARDENING.md](docs/WINDOWS_HARDENING.md) para detalles técnicos.
+| Característica | Estado |
+|----------------|--------|
+| Riot Vanguard | Funcional |
+| HVCI / Memory Integrity | Activado |
+| Credential Guard | Activado |
+| Secure Boot | Verificado |
+| League of Legends | Sin lag |
 
 ---
 
-## Modos de Hardening
+## Comandos
 
-| Modo | VBS/HVCI | ASR Completo | Vanguard | Uso |
-|------|----------|-------------|----------|-----|
-| `Gaming` | Sí | Audit en 2 reglas | Protegido | PC de gaming + desarrollo |
-| `Workstation` | Sí | Bloqueo total | No aplica | Estación de trabajo |
-| `Max` | Sí | Bloqueo total | No aplica | Máxima seguridad |
+- `windows --mode Gaming` - Hardening Windows 11
+- `init` - Inicializa proyecto Node
+- `doctor` - Valida entorno
+- `audit` - Audita dependencias
+- `install` - Instala con baseline
+- `ci` - Para pipelines
+
+Ver [docs/COMMANDS.md](docs/COMMANDS.md) para detalles.
+
+---
+
+## Que hace
+
+**Windows:**
+- VBS, HVCI, Credential Guard
+- LSA Protection
+- 14 ASR rules (12 enforce, 2 audit)
+- Firewall endurecido
+- Deshabilita SMB1, Telnet, PowerShell v2
+
+**Node.js:**
+- .npmrc con save-exact=true
+- Validación de lockfile
+- Detección de versiones sin pin
+- Scan heurístico node_modules
 
 ---
 
 ## Requisitos
 
-- **Windows 11** build 22000 o superior
-- **PowerShell 7+** (`pwsh`)
-- **Administrador** para el comando `windows` (hardening del sistema)
-- **Node.js** para comandos `init`, `doctor`, `audit`, `install`
+- Windows 11 build 22000+
+- PowerShell 7.0+
+- Node.js 18+ (para proyectos)
+- Permisos Admin (para windows)
 
 ---
 
-## v5 vs v6
+## Migracion v5 a v6
 
-| Aspecto | v5 | v6 |
-|---------|-----|-----|
-| Archivos | Múltiples scripts + módulos | **Un solo archivo** `defendo.ps1` |
-| Hardening Windows | Script separado | Integrado en `defendo.ps1 windows` |
-| Dependencias | Requería módulos PowerShell | **Cero dependencias** |
-| Instalación | Clonar repo + setup | Copiar un archivo |
-| Gaming | Configuración manual | `--mode Gaming` automático |
-| Auditoría | npm audit wrapper | Heurístico propio + análisis node_modules |
-
-Ver [docs/MIGRATION_v5_to_v6.md](docs/MIGRATION_v5_to_v6.md) para guía de migración.
-
----
-
-## Documentación
-
-- [Referencia de Comandos](docs/COMMANDS.md)
-- [Hardening Windows](docs/WINDOWS_HARDENING.md)
-- [Migración v5 a v6](docs/MIGRATION_v5_to_v6.md)
+Antes: 3 scripts separados
+Ahora: `.\defendo.ps1 windows --mode Gaming`
 
 ---
 
 ## Licencia
 
-[MIT](LICENSE)
+MIT License
+
+---
+
+**Defendo v6.1.1** - Windows-first, gaming-safe, production-ready.
