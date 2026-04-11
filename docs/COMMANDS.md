@@ -1,133 +1,194 @@
-# Comandos
+# Referencia de Comandos
 
-Este documento describe el comportamiento esperado de los comandos principales de Defendo.
-
-## init
-
-Prepara el baseline de seguridad del repositorio.
-
-### Objetivos
-
-- detectar el package manager
-- escribir configuración endurecida
-- generar documentación operativa local
-- preparar el proyecto para auditoría y CI
-
-### Efectos típicos
-
-- crea `.defendo/config.json`
-- escribe `.npmrc` o la configuración equivalente del gestor detectado
-- genera `AGENTS.md`
-- genera `SECURITY-DEPENDENCIES.md`
-- puede añadir archivos de CI
-
-### Uso
+Todos los comandos se ejecutan con:
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 init --manager auto --with-ci-files
+pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 <comando> [opciones]
 ```
 
-## doctor
+---
 
-Valida que el proyecto y el entorno local tienen una base coherente antes de instalar o auditar.
+## `windows`
 
-### Comprueba
+Endurece Windows 11 aplicando VBS, HVCI, Credential Guard, ASR rules, configuración de firewall y deshabilitación de servicios inseguros.
 
-- presencia de `package.json` cuando aplica
-- coherencia del lockfile
-- detección correcta del package manager
-- baseline esperado del proyecto
-- inconsistencias obvias de configuración
-
-### Uso
+**Requiere**: Administrador
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 doctor
+defendo.ps1 windows --mode Gaming
+defendo.ps1 windows --mode Workstation
+defendo.ps1 windows --mode Max
+defendo.ps1 windows --mode Gaming --action Audit
+defendo.ps1 windows --action Hardening
 ```
 
-## install
+### Opciones
 
-Instala dependencias usando el baseline endurecido del proyecto.
+| Opción | Valores | Default | Descripción |
+|--------|---------|---------|-------------|
+| `--mode` | `Gaming`, `Workstation`, `Max` | `Gaming` | Perfil de hardening |
+| `--action` | `All`, `Hardening`, `Audit`, `PostHardening` | `All` | Qué ejecutar |
 
-### Objetivos
+### Modos
 
-- evitar instalaciones con configuración insegura por defecto
-- respetar políticas del manager detectado
-- dejar el árbol listo para una auditoría inmediata
+- **Gaming**: Protege servicios Vanguard (`vgc`, `vgk`). ASR conflictivas en audit. Ideal para PCs de gaming + desarrollo.
+- **Workstation**: ASR completo en bloqueo. No gestiona Vanguard. Para estaciones de trabajo corporativas.
+- **Max**: Máxima seguridad. Todas las reglas en bloqueo. Para entornos de alta seguridad.
 
-### Notas
+### Acciones
 
-- no sustituye revisión humana
-- no promete bloquear cualquier paquete malicioso
-- debe usarse como ruta normal de instalación en el repo protegido
+- **All**: Ejecuta todo: restore point + hardening + post-hardening + audit.
+- **Hardening**: Solo aplica VBS/HVCI/ASR/firewall. No genera reporte.
+- **PostHardening**: Solo deshabilita servicios innecesarios (TeamViewer, SharedAccess).
+- **Audit**: Solo genera reporte del estado actual sin modificar nada. No requiere Admin.
 
-### Uso
+---
+
+## `init`
+
+Inicializa un proyecto Node.js con la configuración de seguridad de Defendo.
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 install
+cd C:\dev\mi-proyecto
+defendo.ps1 init
+defendo.ps1 init --manager pnpm
+defendo.ps1 init --manager yarn
 ```
 
-También puede usarse con una dependencia concreta:
+### Opciones
+
+| Opción | Valores | Default | Descripción |
+|--------|---------|---------|-------------|
+| `--manager` | `auto`, `npm`, `pnpm`, `yarn` | `auto` | Package manager a usar |
+
+### Qué crea
+
+- `.defendo/config.json` - Configuración con políticas de severidad
+- `.defendo/reports/` - Directorio para reportes de auditoría
+- `.npmrc` endurecido (si usa npm): `audit-level=moderate`, `save-exact=true`, `package-lock=true`
+- `AGENTS.md` - Guía de seguridad para agentes AI que trabajen en el proyecto
+
+### Detección automática
+
+Con `--manager auto` (default), detecta el package manager por lockfile:
+1. `pnpm-lock.yaml` -> pnpm
+2. `yarn.lock` -> yarn
+3. Fallback -> npm
+
+---
+
+## `doctor`
+
+Valida que el entorno esté correctamente configurado para trabajar con Defendo.
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 install nombre-paquete@1.2.3
+defendo.ps1 doctor
 ```
 
-## audit
+### Checks que ejecuta
 
-Realiza una auditoría heurística sobre manifiestos, lockfiles y `node_modules`.
+| Check | Qué valida |
+|-------|-----------|
+| Node.js | Que esté instalado y accesible |
+| Package manager | Detecta npm/pnpm/yarn |
+| package.json | Que exista en el directorio actual |
+| Defendo config | Que `.defendo/config.json` exista (si no, sugiere `init`) |
+| HVCI | Que esté activo (si DeviceGuard disponible) |
+| Credential Guard | Que esté activo |
 
-### Tipos de hallazgo comunes
+### Salida
 
-- `PKG-PINNING`
-- `LOCK-PARSE`
-- `MOD-NETWORK`
-- `MOD-SHELL`
-- `MOD-ENV`
-- `MOD-OBFUSCATION`
+```
+[OK] Node v20.11.0
+[OK] Manager: pnpm
+[OK] package.json presente
+[OK] Defendo configurado
+[OK] HVCI activo
+[OK] Credential Guard activo
+```
 
-### Salida esperada
+---
 
-- informe JSON en `.defendo/reports/`
-- resumen por severidad
-- evidencia revisable por ruta y categoría
+## `audit`
 
-### Uso
+Audita las dependencias del proyecto Node.js actual.
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 audit
+defendo.ps1 audit
 ```
 
-## ci
+### Qué analiza
 
-Ejecuta el gate de CI en modo fail-closed según la política configurada.
+1. **package.json**: Detecta dependencias con rangos (`^`, `~`) en vez de versiones exactas.
+2. **Lockfile**: Verifica que exista `package-lock.json` o `pnpm-lock.yaml`.
+3. **node_modules**: Escaneo heurístico buscando patrones sospechosos (`eval()`, `child_process`, `require("http")`).
 
-### Objetivo
+### Severidades
 
-- bloquear promoción cuando aparezcan findings con severidad bloqueante
-- mantener comportamiento reproducible en pipelines
+| Severidad | Política default | Efecto |
+|-----------|-----------------|--------|
+| Critical | `block` | Exit code 1, bloquea CI |
+| High | `block` | Exit code 1, bloquea CI |
+| Medium | `warn` | Warning, no bloquea |
+| Low | `info` | Informativo |
 
-### Uso
+### Reporte
+
+Genera un JSON en `.defendo/reports/defendo-audit-<timestamp>.json` con:
+
+```json
+{
+  "timestamp": "2025-01-15T10:30:00Z",
+  "project": "C:\\dev\\mi-proyecto",
+  "defendoVersion": "6.0.0",
+  "findings": [...],
+  "summary": { "critical": 0, "high": 0, "medium": 2, "low": 1 }
+}
+```
+
+---
+
+## `install`
+
+Instala dependencias usando el package manager detectado.
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 ci
+defendo.ps1 install              # instala todo (npm/pnpm/yarn install)
+defendo.ps1 install express      # instala paquete específico
+defendo.ps1 install lodash axios # instala múltiples paquetes
 ```
 
-## verify-report
+Detecta el package manager por lockfile (igual que `init`).
 
-Verifica la integridad de un informe generado previamente.
+---
 
-### Qué valida
+## `ci`
 
-- hash SHA-256 del informe
-- firma HMAC opcional si la política la usa
-
-### Uso
+Alias de `audit`. Diseñado para uso en pipelines CI/CD.
 
 ```powershell
-pwsh -ExecutionPolicy Bypass -File C:\Tools\defendo\defendo.ps1 verify-report --signature .\.defendo\reports\defendo-audit-YYYYMMDD_HHMMSS.sig.json
+defendo.ps1 ci
 ```
 
-## Principio operativo
+Retorna exit code 1 si hay findings Critical o High, permitiendo bloquear el pipeline.
 
-Los comandos deben funcionar correctamente en Windows y bajo `Set-StrictMode -Version Latest`. Cualquier cambio futuro debe preservar esa compatibilidad.
+---
+
+## `version`
+
+Muestra la versión de Defendo.
+
+```powershell
+defendo.ps1 version
+# Output: Defendo v6.0.0
+```
+
+---
+
+## `help`
+
+Muestra el resumen de comandos y ejemplos.
+
+```powershell
+defendo.ps1 help
+```
